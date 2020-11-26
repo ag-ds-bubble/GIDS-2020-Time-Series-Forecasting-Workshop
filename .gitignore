@@ -13,6 +13,12 @@ __pycache__/
 .csv
 *.csv
 **.csv
+.xls
+*.xls
+**.xls
+.txt
+*.txt
+**.txt
 .vscode
 .ipynb_checkpoints/
 *.ipynb_checkpoints/
