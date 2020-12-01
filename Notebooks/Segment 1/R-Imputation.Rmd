@@ -31,8 +31,8 @@ library(fpp2)
 library(fpp)
 library(ggplot2)
 
-
-ts2csv(a10)
+ts2csv(elec)
+# print(elec)
 
 autoplot(a10) +
   ggtitle("Antidiabetic drug sales") +
