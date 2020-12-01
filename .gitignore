@@ -5,7 +5,10 @@ __pycache__/
 
 *.pyc
 **.pyc
-
+Notebooks/R-Imputation.nb.html
+Notebooks/R-Imputation.Rmd
+Notebooks/time-series-analysis-of-sunspots.ipynb
+Notebooks/sine_cosine.png
 # Editor and Notebook
 .DS_Store
 *.DS_Store
