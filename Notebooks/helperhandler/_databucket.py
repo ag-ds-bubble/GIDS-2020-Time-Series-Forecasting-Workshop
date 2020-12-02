@@ -1,6 +1,6 @@
 import pandas as pd
 from tqdm.notebook import tqdm
-from .individual_funcs import *
+from ._individual_funcs import *
 
 ############################## DATA PATHS ##############################
 # USA
