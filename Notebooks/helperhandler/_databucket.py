@@ -3,7 +3,9 @@ from tqdm.notebook import tqdm
 from ._individual_funcs import *
 
 ############################## DATA PATHS ##############################
-# USA
+# USA Consumption
+sunspots_datapath = '../Raw Data/Sunspots.csv'
+# USA Consumption
 usa_cipsu_datapath = '../Raw Data/USA_CIPSU.csv'
 # Consumer Price Index for India with Groups and Subgroups
 cpi_datapath = '../Raw Data/cpi_states_and_groups.csv'
@@ -161,6 +163,11 @@ dpc14 = DataProcessingClass(raw_datapath=usa_cipsu_datapath,
                            short_desc = "USA Economic Numbers",
                            processing_func = process_usaeconomic,
                            plotfunc = plot_usaeconomic)
+dpc15 = DataProcessingClass(raw_datapath=sunspots_datapath, 
+                           long_desc = """Monthly Mean of Sunspots observed (Monthly), from 1749-01 to 2019-12""",
+                           short_desc = "Sunspot Numbers",
+                           processing_func = process_sunspots,
+                           plotfunc = plot_sunspots)
 
     
 dataHolder = DataHolderClass()
@@ -178,3 +185,6 @@ dataHolder.add_data(data_key='anti_diabetic', dpc_ob=dpc11)
 dataHolder.add_data(data_key='aus_elecprod', dpc_ob=dpc12)
 dataHolder.add_data(data_key='visitor_20r', dpc_ob=dpc13)
 dataHolder.add_data(data_key='usa_economic', dpc_ob=dpc14)
+dataHolder.add_data(data_key='sunspots', dpc_ob=dpc15)
+
+

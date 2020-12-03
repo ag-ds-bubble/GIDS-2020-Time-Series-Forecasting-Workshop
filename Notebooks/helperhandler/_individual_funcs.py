@@ -4,6 +4,27 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import mplfinance as mpl
 
+
+
+############################## ELECTRICITY PRODUCTION ##############################
+def process_sunspots(path):
+    data=pd.read_csv(path, index_col=[0], usecols=[1,2], parse_dates=True)
+    data.index.name = 'Month'
+    data.columns = ['MMTS']
+    data = data.sort_index()
+    return data
+    
+def plot_sunspots(data, style='ggplot'):
+    plt.rcParams['figure.dpi'] = 100
+    plt.rcParams['figure.figsize'] = (15,7)
+    plt.style.use(style)
+    _=data.plot(title='Monthly Mean of Sunspots observed')
+    _=plt.title('Sunspots')
+    _=plt.ylabel('Mean Sunspots Numbers')
+    
+
+
+
 ############################## ELECTRICITY PRODUCTION ##############################
 def process_usaeconomic(path):
     data = pd.read_csv(path, index_col=0, parse_dates=True)
