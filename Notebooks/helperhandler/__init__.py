@@ -1,12 +1,20 @@
 from ._databucket import dataHolder
 
+import os
+import copy
 import numpy as np
 import pandas as pd
-from statsmodels.tsa.stattools import adfuller, kpss
-from warnings import filterwarnings
-filterwarnings('ignore')
-import copy
+import seaborn as sns
+from tqdm.notebook import tqdm
+import matplotlib.pyplot as plt
 from IPython.display import display
+from warnings import filterwarnings
+from statsmodels.tsa.stattools import kpss
+from statsmodels.tsa.stattools import adfuller
+from statsmodels.graphics.gofplots import qqplot
+from statsmodels.graphics.tsaplots import plot_acf
+
+filterwarnings('ignore')
 
 def get_ts_strength(decomp_obj):
     
@@ -41,15 +49,45 @@ def kpss_test(timeseries, regression='c', nlags="auto", **kwargs):
     return kpss_output.to_frame()
 
 
-def plot_diagnostics():
-    pass
+# https://github.com/facebook/prophet/issues/223#issuecomment-326455744
+class suppress_stdout_stderr(object):
+    '''
+    A context manager for doing a "deep suppression" of stdout and stderr in
+    Python, i.e. will suppress all print, even if the print originates in a
+    compiled C/Fortran sub-function.
+       This will not suppress raised exceptions, since exceptions are printed
+    to stderr just before a script exits, and after the context manager has
+    exited (at least, I think that is why it lets exceptions through).
+
+    '''
+    def __init__(self):
+        # Open a pair of null files
+        self.null_fds = [os.open(os.devnull, os.O_RDWR) for x in range(2)]
+        # Save the actual stdout (1) and stderr (2) file descriptors.
+        self.save_fds = [os.dup(1), os.dup(2)]
+
+    def __enter__(self):
+        # Assign the null pointers to stdout and stderr.
+        os.dup2(self.null_fds[0], 1)
+        os.dup2(self.null_fds[1], 2)
+
+    def __exit__(self, *_):
+        # Re-assign the real stdout/stderr back to (1) and (2)
+        os.dup2(self.save_fds[0], 1)
+        os.dup2(self.save_fds[1], 2)
+        # Close the null files
+        for fd in self.null_fds + self.save_fds:
+            os.close(fd)
 
 
 
-def ro_framework(data, model, model_params, 
+
+def ro_framework(data, model, 
                  target_col, feature_cols,
                  test_start, cv_window, ahead_offest,
-                 metric='MAPE', debug=True, ahead_offest_freq='days'):
+                 test_predict=False, test_roll=False,
+                 model_params=None,
+                 metric='MAPE', debug=True, ahead_offest_freq='days',back_transform_func=None):
     # Three libraries - statsmodels, sklearn, prophet
     
     # Checks
@@ -93,7 +131,7 @@ def ro_framework(data, model, model_params,
     
     modelling_data = data.copy()
     modelling_data.sort_index(inplace=True)
-    
+
     training_data = data[data.index<test_start].copy()
     testing_data = data[data.index>=test_start].copy()
 
@@ -105,8 +143,6 @@ def ro_framework(data, model, model_params,
     if cv_window > training_data.shape[0]*0.5:
         raise ValueError("`cv_window` should be less than {}".format(int(training_data.shape[0]*0.5)))
     
-    
-    
     # Fore debugging purpose
     if debug:
         debugDF = pd.DataFrame(columns=['Train Start', 'Train End', 'CV Point', 'Diff'])
@@ -116,6 +152,7 @@ def ro_framework(data, model, model_params,
                        'CV Point': cv_date, 'Diff': str(getattr(ahead_offest, ahead_offest_freq))+' '+ahead_offest_freq}
             debugDF = debugDF.append(_packet, ignore_index=True)
         display(debugDF)
+        return None
     
     
     # Picking the Metrics
@@ -126,12 +163,47 @@ def ro_framework(data, model, model_params,
     
     
     # Cross Validation Loop
-    for cv_date in training_data.index[-cv_window:]:
-        train_end = cv_date-ahead_offest
-        
+    cvDF, fitted_model = _roll_loop_modelling(pred_indices = training_data.index[-cv_window:], data = training_data.copy(),
+                                             train_start = train_start, feature_cols = feature_cols,
+                                             target_col = target_col, ahead_offest = ahead_offest,
+                                             metric_func = metric_func, modedf = cvDF, metric = metric,
+                                             model = model, model_params = model_params, back_transform_func = back_transform_func)
+    
+    # Testing - Using the last fitted_model
+    if test_predict:
+        if test_roll:
+            testDF, _ = _roll_loop_modelling(pred_indices = testing_data.index, data = modelling_data.copy(),
+                                                        train_start = train_start, feature_cols = feature_cols,
+                                                        target_col = target_col, ahead_offest = ahead_offest,
+                                                        metric_func = metric_func, modedf = testDF, metric = metric,
+                                                        model = model, model_params = model_params, _desc = 'Running Test Roll', back_transform_func = back_transform_func)
+        else:
+            testDF = _simple_forecast(data = testing_data, fitted_model=fitted_model,
+                                      feature_cols=feature_cols, target_col=target_col,
+                                      metric_func=metric_func, modedf=testDF, metric=metric,
+                                      back_transform_func=back_transform_func, test_start=test_start, test_end=test_end)
+    
+    # Prepare Overall Metric
+    overallDF = pd.DataFrame([cvDF[metric].mean(), testDF[metric].mean()],
+                             columns=['Overall '+metric],
+                             index=['CV', 'Test'])
+    
+    cvDF = cvDF.replace({np.inf:np.nan})
+    testDF = testDF.replace({np.inf:np.nan})
+    return cvDF, testDF, overallDF, fitted_model
+
+
+def _roll_loop_modelling(pred_indices, data,
+                        train_start, feature_cols,
+                        target_col, ahead_offest,
+                        metric_func, modedf, metric,
+                        model, model_params, _desc = 'Running CV Roll', back_transform_func=None):
+    
+    for pred_date in tqdm(pred_indices, desc=_desc, leave=True):
+        train_end = pred_date-ahead_offest
         # Filter the data
-        _train_data = training_data.truncate(before=train_start, after=train_end)
-        _cv_data = training_data.loc[cv_date].to_frame().T
+        _train_data = data.truncate(before=train_start, after=train_end)
+        _pred_data = data.loc[pred_date].to_frame().T
         
         if feature_cols:
             # Multivariate
@@ -143,26 +215,137 @@ def ro_framework(data, model, model_params,
                 model_params['endog'] = _train_data[target_col]
                 modeldef = model(**model_params)
                 
-                fitted_model = modeldef.fit()
-                _forecast = fitted_model.predict(start=cv_date, end=cv_date).values[0]
-                _actual = _cv_data[target_col].values[0]
+                _fitted_model = modeldef.fit()
+                _forecast = _fitted_model.predict(start=pred_date, end=pred_date).values[0]
+                _actual = _pred_data[target_col].values[0]
+            elif 'Prophet' in str(model):
+                # Make the training dataframe
+                _prophet_model = model.get_pmodelinstance()
+                _traindf =  _train_data.copy()
+                _traindf.index.name = 'ds'
+                _traindf.reset_index(inplace=True)
+                _traindf.rename(columns={target_col:'y'}, inplace=True)
+                
+                # Make the forecasting dataframe
+                _forecastdf = pd.DataFrame(columns=['ds'])
+                _forecastdf['ds'] = [pred_date]
+                with suppress_stdout_stderr():
+                    _fitted_model = _prophet_model.fit(_traindf)
+                    _forecast = _prophet_model.predict(**{'df':_forecastdf}).yhat.values[0]
+                _actual = _pred_data[target_col].values[0]
 
         # Update Metric Sheets
-        cvDF.loc[cv_date, 'Actual'] = _actual
-        cvDF.loc[cv_date, 'Forecast'] = _forecast
-        cvDF.loc[cv_date,  metric] = metric_func(_actual, _forecast)
-    
-    
-    # Testing - Using the last fitted_model
-    if 'statsmodels' in str(model):
-        testDF['Actual'] = testing_data[target_col]
-        testDF['Forecast'] = fitted_model.predict(start=test_start, end=test_end)
-        testDF[metric] = testDF.apply(lambda x : metric_func(x.Actual, x.Forecast), axis=1)
-    
-    # Prepare Overall Metric
-    overallDF = pd.DataFrame([cvDF[metric].mean(), testDF[metric].mean()],
-                             columns=['Overall '+metric],
-                             index=['CV', 'Test'])
-    
-    return cvDF, testDF, overallDF, fitted_model
+        if back_transform_func:
+            _actual = back_transform_func(_actual)
+            _forecast = back_transform_func(_forecast)
+            
+        modedf.loc[pred_date, 'Actual'] = _actual
+        modedf.loc[pred_date, 'Forecast'] = _forecast
+        modedf.loc[pred_date,  metric] = metric_func(_actual, _forecast)
 
+    return modedf, _fitted_model
+
+
+def _simple_forecast(data, fitted_model, feature_cols,
+                     target_col, metric_func, modedf, metric,
+                     back_transform_func, test_start=None, test_end=None):
+    
+    if feature_cols:
+            # Multivariate
+        pass
+    else:
+        # Univariate
+        if 'statsmodels' in str(fitted_model):
+            modedf['Actual'] = data[target_col]
+            modedf['Forecast'] = fitted_model.predict(start=test_start, end=test_end)
+            modedf[metric] = modedf.apply(lambda x : metric_func(x.Actual, x.Forecast), axis=1)
+        elif 'Prophet' in str(fitted_model):
+            # Make the training dataframe
+            _forecastdf =  data.copy()
+            modedf['Actual'] = _forecastdf[target_col]
+            _forecastdf.index.name = 'ds'
+            _forecastdf.reset_index(inplace=True)
+            _forecastdf = _forecastdf[['ds']].copy()
+            modedf['Forecast'] = fitted_model.predict(_forecastdf).yhat.values
+
+    # Update Metric Sheets
+    if back_transform_func:
+        modedf['Actual'] = back_transform_func(modedf['Actual'])
+        modedf['Forecast'] = back_transform_func(modedf['Forecast'])
+    modedf[metric] = modedf.apply(lambda x : metric_func(x.Actual, x.Forecast), axis=1)
+
+    return modedf
+
+
+
+def residual_diagnostic(respack, training_target):
+
+    tsdata = training_target.copy().to_frame()
+    cvdf, testdf, odf, _ = respack
+    cvdf, testdf, odf = cvdf.copy(), testdf.copy(), odf.copy()
+
+    cvdf['Residuals'] = cvdf['Actual']-cvdf['Forecast']
+    testdf['Residuals'] = testdf['Actual']-testdf['Forecast']
+    
+    fig = plt.figure(figsize=(15,15))
+    _rows = 6
+    if testdf.empty:
+        _rows = 4
+    grid = plt.GridSpec(_rows, 3, figure=fig, wspace=0.2, hspace=0.5)
+    plt.grid()
+    
+    # Time Series Plot
+    ts_axes = plt.subplot(grid[:2,:])
+    ts_axes.plot(tsdata, label='Actual')
+    ts_axes.plot(cvdf.Forecast, color='#aa8ede', label='CV Preidictions')
+
+    if not testdf.empty:
+        ts_axes.plot(testdf.Actual, color='#ddf5a9', label='Test Actual', linestyle=':')
+        ts_axes.plot(testdf.Forecast, color='#fab09b', label='Test Forecast', linewidth=3)
+        _err = testdf.Forecast.expanding().std()*1.96
+        ts_axes.fill_between(testdf.index,
+                            testdf.Forecast+_err,
+                            testdf.Forecast-_err, alpha=0.3,
+                            color='lightgray', label='Prediction Interval')
+    ts_axes.legend()
+    ts_axes.set_title('Actual Series + CV Predictions + Test Forecasts', loc='left')
+    
+    # Cross Validation Diagnostics
+    cvtse_axes = plt.subplot(grid[2,:])
+    cvdis_axes = plt.subplot(grid[3,0])
+    cvqqp_axes = plt.subplot(grid[3,1])
+    cvacf_axes = plt.subplot(grid[3,2])
+    
+    cvtse_axes.plot(cvdf.Residuals)
+    sns.distplot(cvdf['Residuals'], ax=cvdis_axes, rug=True, rug_kws={'color':'r'})
+    qqplot(cvdf['Residuals'], ax=cvqqp_axes, color='w')
+    plot_acf(cvdf['Residuals'], ax=cvacf_axes, title='')
+
+    cvtse_axes.set_title('Cross Validation - {0} - {1}'.format(odf.columns[0], round(odf.loc['CV', odf.columns[0]]),3), loc='left')
+    cvtse_axes.set_ylabel('Residuals')
+    cvdis_axes.set_title('Cross Validation - Distribution', loc='left')
+    cvqqp_axes.set_title('Cross Validation - QQ', loc='left')
+    cvacf_axes.set_title('Cross Validation - ACF', loc='left')
+    
+    
+    # Test Diagnostics
+    if not testdf.empty:
+        tetse_axes = plt.subplot(grid[4,:])
+        tedis_axes = plt.subplot(grid[5,0])
+        teqqp_axes = plt.subplot(grid[5,1])
+        teacf_axes = plt.subplot(grid[5,2])
+        
+        tetse_axes.plot(testdf.Residuals)
+        sns.distplot(testdf['Residuals'], ax=tedis_axes, rug=True, rug_kws={'color':'r'})
+        qqplot(testdf['Residuals'], ax=teqqp_axes, color='w')
+        plot_acf(testdf['Residuals'], ax=teacf_axes, title='')
+
+        tetse_axes.set_title('Test - {0} - {1}'.format(odf.columns[0], round(odf.loc['Test', odf.columns[0]]),3), loc='left')
+        tetse_axes.set_ylabel('Residuals')
+        tedis_axes.set_title('Test - Distribution', loc='left')
+        teqqp_axes.set_title('Test - QQ', loc='left')
+        teacf_axes.set_title('Test - ACF', loc='left')
+    
+    
+    fig.suptitle('Model \nDiagnostic', fontsize=25)
+    
