@@ -157,9 +157,9 @@ def ro_framework(data, model,
     
     # Picking the Metrics
     if metric == 'MAPE':
-        metric_func = lambda y,yhat: np.round(100*(abs(np.array(y)-np.array(yhat))/np.array(y)),2)
+        metric_func = lambda y,yhat: np.round(abs((np.array(y)-np.array(yhat))/np.array(y))*100,2)
     elif metric == 'MSE':
-        metric_func = lambda y,yhat: np.round(100*(abs(np.array(y)-np.array(yhat))/np.array(y)),2)
+        metric_func = lambda y,yhat: np.round((np.array(y)-np.array(yhat))**2,2)
     
     
     # Cross Validation Loop
@@ -178,7 +178,7 @@ def ro_framework(data, model,
                                                         metric_func = metric_func, modedf = testDF, metric = metric,
                                                         model = model, model_params = model_params, _desc = 'Running Test Roll', back_transform_func = back_transform_func)
         else:
-            testDF = _simple_forecast(data = testing_data, fitted_model=fitted_model,
+            testDF = _simple_modelling(data = testing_data, fitted_model=fitted_model,
                                       feature_cols=feature_cols, target_col=target_col,
                                       metric_func=metric_func, modedf=testDF, metric=metric,
                                       back_transform_func=back_transform_func, test_start=test_start, test_end=test_end)
@@ -191,6 +191,7 @@ def ro_framework(data, model,
     cvDF = cvDF.replace({np.inf:np.nan})
     testDF = testDF.replace({np.inf:np.nan})
     return cvDF, testDF, overallDF, fitted_model
+
 
 
 def _roll_loop_modelling(pred_indices, data,
@@ -207,7 +208,25 @@ def _roll_loop_modelling(pred_indices, data,
         
         if feature_cols:
             # Multivariate
-            pass
+            if 'Prophet' in str(model):
+                _prophet_model = model.get_pmodelinstance()
+                _traindf =  _train_data.copy()
+                _traindf = _traindf[[target_col]+feature_cols]
+                _traindf.index.name = 'ds'
+                _traindf.reset_index(inplace=True)
+                _traindf.rename(columns={target_col:'y'}, inplace=True)
+
+                # Make the forecasting dataframe
+                _forecastdf =  _pred_data.copy()
+                _forecastdf = _forecastdf[feature_cols]
+                _forecastdf.index.name = 'ds'
+                _forecastdf.reset_index(inplace=True)
+                _forecastdf.rename(columns={target_col:'y'}, inplace=True)
+                
+                with suppress_stdout_stderr():
+                    _fitted_model = _prophet_model.fit(_traindf)
+                    _forecast = _prophet_model.predict(_forecastdf).yhat.values[0]
+                _actual = _pred_data[target_col].values[0]
         else:
             # Univariate
             if 'statsmodels' in str(model):
@@ -231,7 +250,7 @@ def _roll_loop_modelling(pred_indices, data,
                 _forecastdf['ds'] = [pred_date]
                 with suppress_stdout_stderr():
                     _fitted_model = _prophet_model.fit(_traindf)
-                    _forecast = _prophet_model.predict(**{'df':_forecastdf}).yhat.values[0]
+                    _forecast = _prophet_model.predict(_forecastdf).yhat.values[0]
                 _actual = _pred_data[target_col].values[0]
 
         # Update Metric Sheets
@@ -246,13 +265,21 @@ def _roll_loop_modelling(pred_indices, data,
     return modedf, _fitted_model
 
 
-def _simple_forecast(data, fitted_model, feature_cols,
+def _simple_modelling(data, fitted_model, feature_cols,
                      target_col, metric_func, modedf, metric,
                      back_transform_func, test_start=None, test_end=None):
     
     if feature_cols:
-            # Multivariate
-        pass
+        # Multivariate
+        if 'Prophet' in str(fitted_model):
+            # Make the forecasting dataframe
+            _forecastdf =  data.copy()
+            modedf['Actual'] = _forecastdf[target_col]
+            _forecastdf = _forecastdf[feature_cols]
+            _forecastdf.index.name = 'ds'
+            _forecastdf.reset_index(inplace=True)
+            with suppress_stdout_stderr():
+                modedf['Forecast'] = fitted_model.predict(_forecastdf).yhat.values
     else:
         # Univariate
         if 'statsmodels' in str(fitted_model):
@@ -275,7 +302,6 @@ def _simple_forecast(data, fitted_model, feature_cols,
     modedf[metric] = modedf.apply(lambda x : metric_func(x.Actual, x.Forecast), axis=1)
 
     return modedf
-
 
 
 def residual_diagnostic(respack, training_target):
@@ -348,4 +374,7 @@ def residual_diagnostic(respack, training_target):
     
     
     fig.suptitle('Model \nDiagnostic', fontsize=25)
-    
+    return fig
+
+
+
