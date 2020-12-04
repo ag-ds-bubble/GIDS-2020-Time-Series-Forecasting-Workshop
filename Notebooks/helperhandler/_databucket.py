@@ -51,7 +51,7 @@ class DataProcessingClass:
         self.data = self._processing_func(self.rpath)
         
     def exploratory_plot(self):
-        self._plot_func(self.data, style='dark_background')
+        self._plot_func(self.data, style='ggplot')
         
 
 class DataHolderClass:

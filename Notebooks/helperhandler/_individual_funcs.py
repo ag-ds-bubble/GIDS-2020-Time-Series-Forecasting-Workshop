@@ -3,10 +3,10 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 import mplfinance as mpl
+plt.rcParams['legend.facecolor'] = 'darkgray'
 
 
-
-############################## ELECTRICITY PRODUCTION ##############################
+############################## SUNSPOTS ##############################
 def process_sunspots(path):
     data=pd.read_csv(path, index_col=[0], usecols=[1,2], parse_dates=True)
     data.index.name = 'Month'
@@ -25,7 +25,7 @@ def plot_sunspots(data, style='ggplot'):
 
 
 
-############################## ELECTRICITY PRODUCTION ##############################
+############################## USA ECONOMIC ##############################
 def process_usaeconomic(path):
     data = pd.read_csv(path, index_col=0, parse_dates=True)
     data.index.name = 'Date'
@@ -39,7 +39,7 @@ def plot_usaeconomic(data, style='ggplot'):
     
     
 
-############################## ELECTRICITY PRODUCTION ##############################
+############################## VISITORS TO 20 REGIONS ##############################
 def process_20rvisitors(path):
     data = pd.read_csv(path, index_col=0, parse_dates=True)
     data.index=pd.to_datetime(data.index.str.replace(' ',''))

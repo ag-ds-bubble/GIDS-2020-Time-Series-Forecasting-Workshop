@@ -326,7 +326,7 @@ def residual_diagnostic(respack, training_target):
     ts_axes.plot(cvdf.Forecast, color='#aa8ede', label='CV Preidictions')
 
     if not testdf.empty:
-        ts_axes.plot(testdf.Actual, color='#ddf5a9', label='Test Actual', linestyle=':')
+        ts_axes.plot(testdf.Actual, color='#314d2c', label='Test Actual', linestyle=':')
         ts_axes.plot(testdf.Forecast, color='#fab09b', label='Test Forecast', linewidth=3)
         _err = testdf.Forecast.expanding().std()*1.96
         ts_axes.fill_between(testdf.index,
