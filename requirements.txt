@@ -12,3 +12,4 @@ pytz==2020.4
 fbprophet==0.7.1
 pmdarima==1.8.0
 tseuler==0.0.1dev
+jupyter_contrib_nbextensions==0.5.1
