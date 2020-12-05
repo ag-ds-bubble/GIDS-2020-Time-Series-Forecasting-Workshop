@@ -8,6 +8,8 @@ __pycache__/
 Notebooks/R-Imputation.nb.html
 Notebooks/R-Imputation.Rmd
 Notebooks/sine_cosine.png
+Notebooks/retail-sales-forecast.ipynb
+Prepared Data/mars_jpldata.csv
 # Editor and Notebook
 .DS_Store
 *.DS_Store

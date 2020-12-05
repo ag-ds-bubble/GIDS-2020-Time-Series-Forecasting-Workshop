@@ -6,6 +6,23 @@ import mplfinance as mpl
 plt.rcParams['legend.facecolor'] = 'darkgray'
 
 
+############################## RETAIL SALES ##############################
+def process_retailsales(path):
+    data = pd.read_csv(path, index_col=0, parse_dates=True)
+    data = data.drop('Date', axis=1)
+    data.IsHoliday = data.IsHoliday.apply(lambda x : int(x) if not pd.isna(x) else np.nan)
+    return data
+    
+def plot_retialsales(data, style='ggplot'):
+    plt.rcParams['figure.dpi'] = 100
+    plt.rcParams['figure.figsize'] = (15,7)
+    plt.style.use(style)
+    _=data.groupby('Store').Weekly_Sales.plot(title='Weekly Sales all stores')
+    _=plt.xlabel('Dates')
+    _=plt.ylabel('Qty')
+    
+
+
 ############################## SUNSPOTS ##############################
 def process_sunspots(path):
     data=pd.read_csv(path, index_col=[0], usecols=[1,2], parse_dates=True)

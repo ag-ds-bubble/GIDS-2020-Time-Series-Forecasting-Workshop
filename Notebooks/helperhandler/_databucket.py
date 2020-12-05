@@ -3,7 +3,9 @@ from tqdm.notebook import tqdm
 from ._individual_funcs import *
 
 ############################## DATA PATHS ##############################
-# USA Consumption
+# Retail Sales Data
+retail_sales_datapath = '../Raw Data/retail_data_new.csv'
+# Sunspots
 sunspots_datapath = '../Raw Data/Sunspots.csv'
 # USA Consumption
 usa_cipsu_datapath = '../Raw Data/USA_CIPSU.csv'
@@ -163,11 +165,19 @@ dpc14 = DataProcessingClass(raw_datapath=usa_cipsu_datapath,
                            short_desc = "USA Economic Numbers",
                            processing_func = process_usaeconomic,
                            plotfunc = plot_usaeconomic)
+
 dpc15 = DataProcessingClass(raw_datapath=sunspots_datapath, 
                            long_desc = """Monthly Mean of Sunspots observed (Monthly), from 1749-01 to 2019-12""",
                            short_desc = "Sunspot Numbers",
                            processing_func = process_sunspots,
                            plotfunc = plot_sunspots)
+
+dpc16 = DataProcessingClass(raw_datapath=retail_sales_datapath, 
+                           long_desc = """Retail Sales Data (Weekly) columns with the name `markdown` represent 
+data which was maked (https://www.kaggle.com/manjeetsingh/retaildataset), from 2010 to 2012""",
+                           short_desc = "Retail Sales",
+                           processing_func = process_retailsales,
+                           plotfunc = plot_retialsales)
 
     
 dataHolder = DataHolderClass()
@@ -186,5 +196,6 @@ dataHolder.add_data(data_key='aus_elecprod', dpc_ob=dpc12)
 dataHolder.add_data(data_key='visitor_20r', dpc_ob=dpc13)
 dataHolder.add_data(data_key='usa_economic', dpc_ob=dpc14)
 dataHolder.add_data(data_key='sunspots', dpc_ob=dpc15)
+dataHolder.add_data(data_key='retail_sales', dpc_ob=dpc16)
 
 

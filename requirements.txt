@@ -1,0 +1,13 @@
+matplotlib==3.3.2
+mplfinance==0.12.7a0
+numpy==1.19.4
+pandas==1.1.4
+scipy==1.5.4
+seaborn==0.11.0
+statsmodels==0.12.1
+tqdm==4.53.0
+dateutil==2.8.1
+pytz==2020.4
+fbprophet==0.7.1
+pmdarima==1.8.0
+tseuler==0.0.1dev
