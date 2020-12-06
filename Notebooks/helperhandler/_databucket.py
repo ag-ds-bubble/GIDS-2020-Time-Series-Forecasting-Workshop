@@ -13,7 +13,7 @@ usa_cipsu_datapath = '../Raw Data/USA_CIPSU.csv'
 cpi_datapath = '../Raw Data/cpi_states_and_groups.csv'
 # Total Air Passengers
 airpassengers_datapath = '../Raw Data/AirPassengers.csv'
-# Total Air Passengers
+# House Prices daa
 houseprices_datapath = '../Raw Data/Housing_data_prices.csv'
 # Australlian Monthly Beer Production
 beerprod_datapath = '../Raw Data/Australlian_Monthly_Beer_Production.csv'
